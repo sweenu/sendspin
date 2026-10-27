@@ -42,11 +42,10 @@ int main(int argc, char** argv) {
     using namespace sendspin;
 
     PlayerRole* player_ptr = nullptr;
-    std::atomic<int> last_applied{-1};
     std::atomic<bool> streaming{false};
 
     // Declared before the client so they outlive it (sendspin-cpp: listener must outlive the client); prevents a shutdown-time use-after-free when ~SendspinClient joins the sync task.
-    PlayerListener player_listener(sink, volume, reporter, &player_ptr, &last_applied, &streaming);
+    PlayerListener player_listener(sink, volume, reporter, &player_ptr, &streaming);
     MetaListener meta_listener(reporter);
     NetProvider net;
 
@@ -89,6 +88,11 @@ int main(int argc, char** argv) {
 
     if (!client.start_server()) { std::fprintf(stderr, "sendspin: start_server failed\n"); return 1; }
 
+    // Report the mixer's current volume / mute rather than the library's
+    // defaults (volume 0, unmuted) in the first client/state.
+    if (auto v = volume.poll_volume_change()) player.update_volume(*v);
+    if (auto m = volume.poll_mute_change()) player.update_muted(*m);
+
     MdnsAdvertiser mdns;
     mdns.start(opt.name, opt.sendspin_port, "/sendspin");
 
@@ -104,12 +108,9 @@ int main(int argc, char** argv) {
         auto now = std::chrono::steady_clock::now();
         if (now - last_poll >= std::chrono::seconds(1)) {
             last_poll = now;
-            // local volume change -> report to MA (set-if-changed)
-            int cur = volume.current_sendspin_volume();
-            if (cur >= 0 && cur != last_applied.load()) {
-                player.update_volume(static_cast<uint8_t>(cur));
-                last_applied.store(cur);
-            }
+            // local volume / mute change -> report to MA (set-if-changed)
+            if (auto v = volume.poll_volume_change()) player.update_volume(*v);
+            if (auto m = volume.poll_mute_change()) player.update_muted(*m);
             // position -> ACR
             if (client.is_connected()) {
                 uint32_t dur = metadata.get_track_duration_ms();

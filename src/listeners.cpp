@@ -32,10 +32,7 @@ void PlayerListener::on_stream_end() {
     reporter_.post(make_state_changed("stopped"));
 }
 
-void PlayerListener::on_volume_changed(uint8_t v) {
-    vol_.set_sendspin_volume(v);
-    last_applied_->store(v);
-}
+void PlayerListener::on_volume_changed(uint8_t v) { vol_.set_sendspin_volume(v); }
 
 void PlayerListener::on_mute_changed(bool muted) { vol_.set_muted(muted); }
 

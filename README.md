@@ -35,7 +35,7 @@ The daemon is a thin composition of small, independently-testable units:
 | `options` | Command-line parsing → `Options` |
 | `alsa_sink` | Writes decoded PCM to the ALSA `default` device |
 | `volume_control` | ALSA `snd_mixer` get/set/monitor + mute |
-| `volume_scale` | Sendspin 0–255 ↔ ALSA mixer range (pure) |
+| `volume_scale` | Sendspin 0–100 loudness ↔ mixer gain, per the spec curve (pure) |
 | `acr_reporter` | Non-blocking libcurl POST queue to audiocontrol |
 | `report_json` / `metadata_map` | Build the audiocontrol update JSON (pure) |
 | `command_server` | Minimal HTTP listener on `127.0.0.1:3547` |
@@ -57,8 +57,8 @@ The daemon is a thin composition of small, independently-testable units:
   **main loop** dispatches it to the Sendspin controller role (Sendspin has no
   seek command, so seek is not exposed).
 - **Volume (both ways):** MA volume → the ALSA mixer control; a once-per-second
-  poll reports local mixer changes back to MA (set-if-changed to avoid feedback
-  loops). audiocontrol already monitors the same hardware control, so the UI
+  poll reports local mixer volume and mute changes back to MA (set-if-changed to
+  avoid feedback loops). audiocontrol already monitors the same hardware control, so the UI
   tracks it automatically.
 
 ## Audio & volume model (HiFiBerryOS convention)
@@ -69,6 +69,11 @@ The daemon is a thin composition of small, independently-testable units:
   card's `hw:<index>` — the same physical control audiocontrol's global volume
   drives (e.g. `Digital` on a DAC+/Amp2). Discovery happens in the
   `start-sendspin` wrapper, not in the binary.
+- **Sendspin volume is perceived loudness.** Per the Sendspin player spec,
+  volume `v` (0–100) is applied as amplitude `(v/100)^1.5`, i.e.
+  `30·log10(v/100)` dB below the control's maximum (50 ≈ −9 dB, 10 = −30 dB).
+  Controls with a dB scale are driven in dB; a control without one has its raw
+  steps treated as linear amplitude.
 
 ## Command-line flags
 
